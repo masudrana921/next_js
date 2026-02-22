@@ -26,7 +26,7 @@ export default function AuthLayout({
         />
 
         {/* Main Content */}
-        <main className="flex-1 p-6 bg-gray-100">
+        <main className="flex-1 bg-gray-100">
 
           {/* AuthChecker wrap */}
           <AuthChecker>

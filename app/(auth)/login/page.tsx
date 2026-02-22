@@ -9,28 +9,28 @@ export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const router = useRouter();
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     try {
       const response = await api.post("/token/", { username, password });
 
-      // Access এবং Refresh Token সেভ করা
-      Cookies.set("access", response.data.access);
-      Cookies.set("refresh", response.data.refresh);
+      // Save tokens
+      localStorage.setItem("access", response.data.access);
+      localStorage.setItem("refresh", response.data.refresh);
+      // save user
+      localStorage.setItem("user", JSON.stringify(response.data.user));
 
-      // লগইন সফল হলে চাইলে রিডিরেক্ট
-      console.log("Login successful!");
-          // Redirect based on roles
-          
+      // Show success message
       const user = response.data.user;
-      console.log(user);
 
-
-      if (user.is_staff == true && user.is_superuser == true) {
-        router.push("/management"); // Staff + Superuser → Management
-      } else {
-        router.push("/"); // Active normal user → Landing page
+      // ✅ Use explicit router.push with return
+      if (user.is_staff && user.is_superuser) {
+        router.push("/management");
+        return; // Stop further execution
       }
+
+      router.push("/");
     } catch (error: any) {
       console.error("Login failed:", error.response?.data || error.message);
     }

@@ -30,7 +30,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const [activeItem, setActiveItem] = useState("home");
 
   const menuItems = [
-    { id: "home", label: "Home", icon: Home, href: "/" },
+    { id: "home", label: "Home", icon: Home, href: "/management" },
     { id: "shop", label: "Shop", icon: ShoppingBag, href: "/management/shops" },
     { id: "categories", label: "Categories", icon: Grid, href: "/categories" },
     { id: "deals", label: "Deals", icon: Tag, href: "/orders", badge: "HOT" },

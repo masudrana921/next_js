@@ -35,28 +35,30 @@ export default function Header({ onMenuClick }: HeaderProps) {
   const router = useRouter();
 
   const [username, setUsername] = useState(null);
+  const [profileImage, setProfileImage] = useState(null);
 
-  // এই useEffect রেন্ডার হওয়ার পরে রান করে
   useEffect(() => {
     const userData = localStorage.getItem("user");
     if (userData) {
       const user = JSON.parse(userData);
-      setUsername(user.name); // ২য় রেন্ডারে এইটা সেট হবে
+      setUsername(user.username || null);           
+      setProfileImage(user.profile_image || null);
     }
-  }, []); // emp
+  }, []);
 
   const toggleDarkMode = () => {
     setIsDarkMode(!isDarkMode);
     document.documentElement.classList.toggle('dark');
   };
+
   const handleLogout = () => {
     // Remove tokens from localStorage
     localStorage.removeItem("user");
     localStorage.removeItem("access_token");
 
     // Remove tokens from cookies (if your app uses cookies)
-    Cookies.remove("access");
-    Cookies.remove("refresh");
+    localStorage.removeItem("access");
+    localStorage.removeItem("refresh");
 
     // Show success message
     toast.success("Logged out successfully");
@@ -194,8 +196,18 @@ export default function Header({ onMenuClick }: HeaderProps) {
                 className="flex items-center gap-2 p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                 aria-label="User menu"
               >
-                <div className="h-8 w-8 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 flex items-center justify-center">
-                  <User className="h-4 w-4 text-white" />
+                <div className="h-8 w-8 rounded-full flex items-center justify-center overflow-hidden">
+                  {profileImage ? (
+                    <img
+                      src={profileImage}
+                      alt={username || "User"}
+                      className="h-8 w-8 object-cover rounded-full"
+                    />
+                  ) : (
+                    <div className="h-8 w-8 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 flex items-center justify-center">
+                      <User className="h-4 w-4 text-white" />
+                    </div>
+                  )}
                 </div>
                 <span className="hidden lg:block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                   {username || "Guest"}
@@ -207,8 +219,8 @@ export default function Header({ onMenuClick }: HeaderProps) {
               {isUserMenuOpen && (
                 <div className="absolute right-0 mt-2 w-48 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-lg py-1">
                   {[
-                    { icon: User, label: "Profile", href: "/profile" },
-                    { icon: Package, label: "Orders", href: "/orders" },
+                    { icon: User, label: "Profile", href: "/management/profile" },
+                    { icon: Package, label: "Orders", href: "/management/orders" },
                     { icon: Heart, label: "Wishlist", href: "/wishlist" },
                     { icon: Settings, label: "Settings", href: "/settings" },
                     { icon: LogOut, label: "Logout", onClick: handleLogout },

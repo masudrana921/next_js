@@ -1,221 +1,168 @@
 "use client";
+import Image from "next/image";
+import { useEffect, useState, useMemo } from "react";
+import api from "@/services/api/axiosClient";
 
-import { useState } from "react";
-import { 
-  Search,
-  Filter,
-  Download,
-  Eye,
-  Package,
-  Truck,
-  CheckCircle,
-  XCircle,
-  Clock,
-  ChevronLeft,
-  ChevronRight,
-  MoreHorizontal,
-  ArrowUpDown,
-  Calendar,
-  DollarSign,
-  MapPin,
-  Printer,
-  FileText,
-  RefreshCw
-} from "lucide-react";
-import Link from "next/link";
-
-// Order type definition
 interface Order {
-  id: string;
-  orderNumber: string;
-  customer: {
-    name: string;
-    email: string;
-    avatar?: string;
-  };
-  date: string;
-  total: number;
-  status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refunded';
-  paymentStatus: 'paid' | 'pending' | 'failed' | 'refunded';
-  paymentMethod: string;
-  items: number;
-  shippingAddress: string;
+  id: number;
+  user: string;
+  status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
+  created_at: string;
+  updated_at: string;
+  total_price: string;
+  products: number;
 }
 
-export default function OrdersPage() {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState<string>('all');
-  const [selectedPaymentStatus, setSelectedPaymentStatus] = useState<string>('all');
-  const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'year' | 'custom'>('month');
+interface PaginatedResponse {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: {
+    orders: Order[];
+    net_total: number;
+    pending_orders: number;
+  };
+}
+
+interface OrderStats {
+  total: number;
+  pending: number;
+  processing: number;
+  shipped: number;
+  delivered: number;
+  cancelled: number;
+  totalRevenue: number;
+  netTotal?: number;
+}
+
+export default function OrdersTable() {
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Statistics from API
+  const [netTotal, setNetTotal] = useState<number>(0);
+  const [pendingOrdersCount, setPendingOrdersCount] = useState<number>(0);
+
+  // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
-  const [sortField, setSortField] = useState<keyof Order>('date');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
-  const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
-  const [viewOrder, setViewOrder] = useState<Order | null>(null);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [nextPageUrl, setNextPageUrl] = useState<string | null>(null);
+  const [prevPageUrl, setPrevPageUrl] = useState<string | null>(null);
 
-  // Sample orders data
-  const orders: Order[] = [
-    {
-      id: '1',
-      orderNumber: '#ORD-2024-001',
-      customer: {
-        name: 'John Doe',
-        email: 'john.doe@example.com',
-      },
-      date: '2024-01-15T10:30:00Z',
-      total: 299.99,
-      status: 'delivered',
-      paymentStatus: 'paid',
-      paymentMethod: 'Credit Card',
-      items: 3,
-      shippingAddress: '123 Main St, New York, NY 10001'
-    },
-    {
-      id: '2',
-      orderNumber: '#ORD-2024-002',
-      customer: {
-        name: 'Jane Smith',
-        email: 'jane.smith@example.com',
-      },
-      date: '2024-01-16T14:20:00Z',
-      total: 149.50,
-      status: 'processing',
-      paymentStatus: 'paid',
-      paymentMethod: 'PayPal',
-      items: 2,
-      shippingAddress: '456 Oak Ave, Los Angeles, CA 90001'
-    },
-    {
-      id: '3',
-      orderNumber: '#ORD-2024-003',
-      customer: {
-        name: 'Robert Johnson',
-        email: 'robert.j@example.com',
-      },
-      date: '2024-01-16T09:15:00Z',
-      total: 89.99,
-      status: 'pending',
-      paymentStatus: 'pending',
-      paymentMethod: 'Bank Transfer',
-      items: 1,
-      shippingAddress: '789 Pine Rd, Chicago, IL 60601'
-    },
-    {
-      id: '4',
-      orderNumber: '#ORD-2024-004',
-      customer: {
-        name: 'Emily Davis',
-        email: 'emily.d@example.com',
-      },
-      date: '2024-01-15T16:45:00Z',
-      total: 567.25,
-      status: 'shipped',
-      paymentStatus: 'paid',
-      paymentMethod: 'Credit Card',
-      items: 4,
-      shippingAddress: '321 Elm Blvd, Houston, TX 77001'
-    },
-    {
-      id: '5',
-      orderNumber: '#ORD-2024-005',
-      customer: {
-        name: 'Michael Wilson',
-        email: 'michael.w@example.com',
-      },
-      date: '2024-01-14T11:30:00Z',
-      total: 234.99,
-      status: 'cancelled',
-      paymentStatus: 'refunded',
-      paymentMethod: 'PayPal',
-      items: 2,
-      shippingAddress: '654 Cedar Ln, Phoenix, AZ 85001'
-    },
-    {
-      id: '6',
-      orderNumber: '#ORD-2024-006',
-      customer: {
-        name: 'Sarah Brown',
-        email: 'sarah.b@example.com',
-      },
-      date: '2024-01-14T13:20:00Z',
-      total: 789.00,
-      status: 'delivered',
-      paymentStatus: 'paid',
-      paymentMethod: 'Credit Card',
-      items: 5,
-      shippingAddress: '987 Spruce Way, Philadelphia, PA 19019'
-    },
-    {
-      id: '7',
-      orderNumber: '#ORD-2024-007',
-      customer: {
-        name: 'David Lee',
-        email: 'david.lee@example.com',
-      },
-      date: '2024-01-13T10:00:00Z',
-      total: 45.99,
-      status: 'refunded',
-      paymentStatus: 'refunded',
-      paymentMethod: 'Debit Card',
-      items: 1,
-      shippingAddress: '147 Maple Dr, San Antonio, TX 78201'
-    },
-    {
-      id: '8',
-      orderNumber: '#ORD-2024-008',
-      customer: {
-        name: 'Lisa Anderson',
-        email: 'lisa.a@example.com',
-      },
-      date: '2024-01-13T15:45:00Z',
-      total: 324.50,
-      status: 'processing',
-      paymentStatus: 'paid',
-      paymentMethod: 'Apple Pay',
-      items: 3,
-      shippingAddress: '258 Birch St, San Diego, CA 92101'
+  // Search and filter states
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  // Calculate additional statistics from orders (for status breakdown)
+  const stats = useMemo(() => {
+    return orders.reduce((acc, order) => {
+      acc.total += 1;
+      acc[order.status] += 1;
+      acc.totalRevenue += parseFloat(order.total_price);
+      return acc;
+    }, {
+      total: 0,
+      pending: 0,
+      processing: 0,
+      shipped: 0,
+      delivered: 0,
+      cancelled: 0,
+      totalRevenue: 0
+    } as OrderStats);
+  }, [orders]);
+
+  // Filter orders based on search query and status filter
+  const filteredOrders = useMemo(() => {
+    return orders.filter(order => {
+      // Status filter
+      if (statusFilter !== 'all' && order.status !== statusFilter) {
+        return false;
+      }
+
+      // Search filter (by order ID or user)
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        return (
+          order.id.toString().includes(query) ||
+          order.user.toLowerCase().includes(query)
+        );
+      }
+
+      return true;
+    });
+  }, [orders, searchQuery, statusFilter]);
+
+  const fetchOrders = async (url?: string) => {
+    try {
+      setLoading(true);
+      let res;
+
+      if (url) {
+        res = await api.get(url);
+      } else {
+        res = await api.get("/orders/", {
+          params: {
+            page: currentPage,
+          }
+        });
+      }
+
+      const paginatedData: PaginatedResponse = res.data;
+
+      const ordersData = paginatedData.results.orders || [];
+      setOrders(ordersData);
+
+      setNetTotal(paginatedData.results.net_total || 0);
+      setPendingOrdersCount(paginatedData.results.pending_orders || 0);
+
+      setTotalOrders(paginatedData.count);
+      setNextPageUrl(paginatedData.next);
+      setPrevPageUrl(paginatedData.previous);
+
+      const itemsPerPage = ordersData.length;
+      const calculatedTotalPages = Math.ceil(paginatedData.count / itemsPerPage);
+      setTotalPages(calculatedTotalPages || 1);
+
+      setError(null);
+    } catch (error) {
+      console.error("Failed to fetch orders", error);
+      setError("Failed to load orders. Please try again later.");
+    } finally {
+      setLoading(false);
     }
-  ];
-
-  // Status badge component
-  const StatusBadge = ({ status }: { status: Order['status'] }) => {
-    const statusConfig = {
-      pending: { bg: 'bg-yellow-100 dark:bg-yellow-900/30', text: 'text-yellow-800 dark:text-yellow-300', icon: Clock, label: 'Pending' },
-      processing: { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-800 dark:text-blue-300', icon: RefreshCw, label: 'Processing' },
-      shipped: { bg: 'bg-purple-100 dark:bg-purple-900/30', text: 'text-purple-800 dark:text-purple-300', icon: Truck, label: 'Shipped' },
-      delivered: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-800 dark:text-green-300', icon: CheckCircle, label: 'Delivered' },
-      cancelled: { bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-800 dark:text-red-300', icon: XCircle, label: 'Cancelled' },
-      refunded: { bg: 'bg-gray-100 dark:bg-gray-900/30', text: 'text-gray-800 dark:text-gray-300', icon: DollarSign, label: 'Refunded' },
-    };
-
-    const config = statusConfig[status];
-    const Icon = config.icon;
-
-    return (
-      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${config.bg} ${config.text}`}>
-        <Icon className="h-3.5 w-3.5" />
-        {config.label}
-      </span>
-    );
   };
 
-  // Payment status badge
-  const PaymentStatusBadge = ({ status }: { status: Order['paymentStatus'] }) => {
-    const statusConfig = {
-      paid: 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',
-      pending: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300',
-      failed: 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300',
-      refunded: 'bg-gray-100 dark:bg-gray-900/30 text-gray-800 dark:text-gray-300',
-    };
+  useEffect(() => {
+    fetchOrders();
+  }, [currentPage]);
 
-    return (
-      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${statusConfig[status]}`}>
-        {status.charAt(0).toUpperCase() + status.slice(1)}
-      </span>
-    );
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
   };
 
-  // Format date
+  const handleNextPage = () => {
+    if (nextPageUrl) {
+      fetchOrders(nextPageUrl);
+      setCurrentPage(prev => prev + 1);
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (prevPageUrl) {
+      fetchOrders(prevPageUrl);
+      setCurrentPage(prev => prev - 1);
+    }
+  };
+
+  const formatCurrency = (amount: string | number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(typeof amount === 'string' ? parseFloat(amount) : amount);
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -226,555 +173,260 @@ export default function OrdersPage() {
     });
   };
 
-  // Handle sort
-  const handleSort = (field: keyof Order) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('asc');
-    }
+  const getStatusColor = (status: Order['status']) => {
+    const colors = {
+      pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
+      processing: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+      shipped: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
+      delivered: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+      cancelled: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+    };
+    return colors[status] || 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
   };
 
-  // Handle select all
-  const handleSelectAll = () => {
-    if (selectedOrders.length === filteredOrders.length) {
-      setSelectedOrders([]);
-    } else {
-      setSelectedOrders(filteredOrders.map(order => order.id));
-    }
-  };
+  if (loading && orders.length === 0) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-white"></div>
+        <span className="ml-2 text-gray-700 dark:text-gray-300">Loading orders...</span>
+      </div>
+    );
+  }
 
-  // Handle select order
-  const handleSelectOrder = (orderId: string) => {
-    if (selectedOrders.includes(orderId)) {
-      setSelectedOrders(selectedOrders.filter(id => id !== orderId));
-    } else {
-      setSelectedOrders([...selectedOrders, orderId]);
-    }
-  };
-
-  // Filter orders
-  const filteredOrders = orders.filter(order => {
-    // Search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      return (
-        order.orderNumber.toLowerCase().includes(query) ||
-        order.customer.name.toLowerCase().includes(query) ||
-        order.customer.email.toLowerCase().includes(query)
-      );
-    }
-    
-    // Status filter
-    if (selectedStatus !== 'all' && order.status !== selectedStatus) {
-      return false;
-    }
-    
-    // Payment status filter
-    if (selectedPaymentStatus !== 'all' && order.paymentStatus !== selectedPaymentStatus) {
-      return false;
-    }
-    
-    return true;
-  });
-
-  // Sort orders
-  const sortedOrders = [...filteredOrders].sort((a, b) => {
-    const aValue = a[sortField];
-    const bValue = b[sortField];
-    
-    if (typeof aValue === 'string' && typeof bValue === 'string') {
-      return sortDirection === 'asc' 
-        ? aValue.localeCompare(bValue)
-        : bValue.localeCompare(aValue);
-    }
-    
-    if (typeof aValue === 'number' && typeof bValue === 'number') {
-      return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
-    }
-    
-    return 0;
-  });
-
-  // Pagination
-  const itemsPerPage = 5;
-  const totalPages = Math.ceil(sortedOrders.length / itemsPerPage);
-  const paginatedOrders = sortedOrders.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
-
-  // Stats
-  const stats = {
-    total: orders.length,
-    pending: orders.filter(o => o.status === 'pending').length,
-    processing: orders.filter(o => o.status === 'processing').length,
-    shipped: orders.filter(o => o.status === 'shipped').length,
-    delivered: orders.filter(o => o.status === 'delivered').length,
-    cancelled: orders.filter(o => o.status === 'cancelled').length,
-    revenue: orders.reduce((sum, o) => sum + o.total, 0).toFixed(2)
-  };
+  if (error) {
+    return (
+      <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded relative" role="alert">
+        <strong className="font-bold">Error!</strong>
+        <span className="block sm:inline"> {error}</span>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-black pb-20">
-      {/* Header */}
-      <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-zinc-900 dark:text-white">
-                Orders
-              </h1>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-1">
-                Manage and track all customer orders
-              </p>
-            </div>
-            
-            {/* Action Buttons */}
-            <div className="flex items-center gap-3">
-              <button className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
-                <Download className="h-4 w-4" />
-                Export
-              </button>
-              <button className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 text-sm font-medium text-white hover:opacity-90 transition-opacity">
-                <Package className="h-4 w-4" />
-                New Order
-              </button>
-            </div>
+    <div className="space-y-4 p-4 bg-gray-50 dark:bg-gray-900 min-h-screen">
+      {/* Statistics Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+          <div className="text-sm text-gray-500 dark:text-gray-400">Total Orders</div>
+          <div className="text-2xl font-bold text-gray-900 dark:text-white">{totalOrders}</div>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+          <div className="text-sm text-gray-500 dark:text-gray-400">Pending Orders</div>
+          <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
+            {pendingOrdersCount || stats.pending}
           </div>
-
-          {/* Stats Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4 mt-8">
-            <div className="bg-zinc-50 dark:bg-zinc-800/50 rounded-lg p-4">
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">Total</p>
-              <p className="text-2xl font-bold text-zinc-900 dark:text-white">{stats.total}</p>
-            </div>
-            <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-4">
-              <p className="text-sm text-yellow-600 dark:text-yellow-400">Pending</p>
-              <p className="text-2xl font-bold text-yellow-700 dark:text-yellow-300">{stats.pending}</p>
-            </div>
-            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-              <p className="text-sm text-blue-600 dark:text-blue-400">Processing</p>
-              <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">{stats.processing}</p>
-            </div>
-            <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
-              <p className="text-sm text-purple-600 dark:text-purple-400">Shipped</p>
-              <p className="text-2xl font-bold text-purple-700 dark:text-purple-300">{stats.shipped}</p>
-            </div>
-            <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
-              <p className="text-sm text-green-600 dark:text-green-400">Delivered</p>
-              <p className="text-2xl font-bold text-green-700 dark:text-green-300">{stats.delivered}</p>
-            </div>
-            <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4">
-              <p className="text-sm text-red-600 dark:text-red-400">Cancelled</p>
-              <p className="text-2xl font-bold text-red-700 dark:text-red-300">{stats.cancelled}</p>
-            </div>
-            <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-lg p-4">
-              <p className="text-sm text-emerald-600 dark:text-emerald-400">Revenue</p>
-              <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">${stats.revenue}</p>
-            </div>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+          <div className="text-sm text-gray-500 dark:text-gray-400">Delivered Orders</div>
+          <div className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.delivered}</div>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+          <div className="text-sm text-gray-500 dark:text-gray-400">Total Revenue</div>
+          <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+            {formatCurrency(netTotal || stats.totalRevenue)}
           </div>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-        {/* Filters */}
-        <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 p-6 mb-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            {/* Search */}
-            <div className="lg:col-span-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-                <input
-                  type="text"
-                  placeholder="Search by order #, customer, email..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
+      {/* Header with Add Order Button */}
+      <div className="flex justify-between items-center">
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Orders Management</h2>
+        <button
+          className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          Add Order
+        </button>
+      </div>
 
-            {/* Status Filter */}
-            <div>
-              <select
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value)}
-                className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">All Status</option>
-                <option value="pending">Pending</option>
-                <option value="processing">Processing</option>
-                <option value="shipped">Shipped</option>
-                <option value="delivered">Delivered</option>
-                <option value="cancelled">Cancelled</option>
-                <option value="refunded">Refunded</option>
-              </select>
-            </div>
-
-            {/* Payment Status Filter */}
-            <div>
-              <select
-                value={selectedPaymentStatus}
-                onChange={(e) => setSelectedPaymentStatus(e.target.value)}
-                className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">All Payment</option>
-                <option value="paid">Paid</option>
-                <option value="pending">Pending</option>
-                <option value="failed">Failed</option>
-                <option value="refunded">Refunded</option>
-              </select>
-            </div>
-
-            {/* Date Range */}
-            <div>
-              <select
-                value={dateRange}
-                onChange={(e) => setDateRange(e.target.value as any)}
-                className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="today">Today</option>
-                <option value="week">This Week</option>
-                <option value="month">This Month</option>
-                <option value="year">This Year</option>
-                <option value="custom">Custom Range</option>
-              </select>
-            </div>
+      {/* Search and Filter Bar */}
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex-1">
+          <div className="relative w-70"> {/* width adjust: 40 = 10rem */}
+            <input
+              type="text"
+              placeholder="Search by Order ID or User..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+            />
+            <svg
+              className="absolute left-3 top-2.5 h-5 w-5 text-gray-400 dark:text-gray-500"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
           </div>
-
-          {/* Active Filters */}
-          {(selectedStatus !== 'all' || selectedPaymentStatus !== 'all' || searchQuery) && (
-            <div className="flex items-center gap-2 mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-800">
-              <span className="text-xs text-zinc-500 dark:text-zinc-400">Active filters:</span>
-              {selectedStatus !== 'all' && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-100 dark:bg-blue-900/30 text-xs font-medium text-blue-800 dark:text-blue-300">
-                  Status: {selectedStatus}
-                  <button onClick={() => setSelectedStatus('all')}>×</button>
-                </span>
-              )}
-              {selectedPaymentStatus !== 'all' && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-xs font-medium text-green-800 dark:text-green-300">
-                  Payment: {selectedPaymentStatus}
-                  <button onClick={() => setSelectedPaymentStatus('all')}>×</button>
-                </span>
-              )}
-              {searchQuery && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-purple-100 dark:bg-purple-900/30 text-xs font-medium text-purple-800 dark:text-purple-300">
-                  Search: {searchQuery}
-                  <button onClick={() => setSearchQuery('')}>×</button>
-                </span>
-              )}
-            </div>
-          )}
         </div>
-
-        {/* Orders Table */}
-        <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden">
-          {/* Bulk Actions */}
-          {selectedOrders.length > 0 && (
-            <div className="bg-blue-50 dark:bg-blue-900/20 px-6 py-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-              <span className="text-sm text-blue-800 dark:text-blue-300">
-                {selectedOrders.length} orders selected
-              </span>
-              <div className="flex items-center gap-3">
-                <button className="text-sm text-blue-800 dark:text-blue-300 hover:text-blue-900 dark:hover:text-blue-200 font-medium">
-                  Update Status
-                </button>
-                <button className="text-sm text-blue-800 dark:text-blue-300 hover:text-blue-900 dark:hover:text-blue-200 font-medium">
-                  Export Selected
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-zinc-50 dark:bg-zinc-800/50 border-b border-zinc-200 dark:border-zinc-800">
-                <tr>
-                  <th className="px-6 py-4 text-left">
-                    <input
-                      type="checkbox"
-                      checked={selectedOrders.length === filteredOrders.length && filteredOrders.length > 0}
-                      onChange={handleSelectAll}
-                      className="rounded border-zinc-300 dark:border-zinc-600 text-blue-600 focus:ring-blue-500"
-                    />
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-                    <button
-                      onClick={() => handleSort('orderNumber')}
-                      className="flex items-center gap-1 hover:text-zinc-700 dark:hover:text-zinc-300"
-                    >
-                      Order
-                      <ArrowUpDown className="h-3 w-3" />
-                    </button>
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-                    Customer
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-                    <button
-                      onClick={() => handleSort('date')}
-                      className="flex items-center gap-1 hover:text-zinc-700 dark:hover:text-zinc-300"
-                    >
-                      Date
-                      <ArrowUpDown className="h-3 w-3" />
-                    </button>
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-                    Payment
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-                    <button
-                      onClick={() => handleSort('total')}
-                      className="flex items-center gap-1 hover:text-zinc-700 dark:hover:text-zinc-300"
-                    >
-                      Total
-                      <ArrowUpDown className="h-3 w-3" />
-                    </button>
-                  </th>
-                  <th className="px-6 py-4 text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-                {paginatedOrders.map((order) => (
-                  <tr 
-                    key={order.id}
-                    className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors group"
-                  >
-                    <td className="px-6 py-4">
-                      <input
-                        type="checkbox"
-                        checked={selectedOrders.includes(order.id)}
-                        onChange={() => handleSelectOrder(order.id)}
-                        className="rounded border-zinc-300 dark:border-zinc-600 text-blue-600 focus:ring-blue-500"
-                      />
-                    </td>
-                    <td className="px-6 py-4">
-                      <div>
-                        <Link 
-                          href={`/orders/${order.id}`}
-                          className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
-                        >
-                          {order.orderNumber}
-                        </Link>
-                        <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                          {order.items} items
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div>
-                        <div className="font-medium text-zinc-900 dark:text-white">
-                          {order.customer.name}
-                        </div>
-                        <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                          {order.customer.email}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-zinc-600 dark:text-zinc-400">
-                      {formatDate(order.date)}
-                    </td>
-                    <td className="px-6 py-4">
-                      <StatusBadge status={order.status} />
-                    </td>
-                    <td className="px-6 py-4">
-                      <PaymentStatusBadge status={order.paymentStatus} />
-                      <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                        {order.paymentMethod}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="font-bold text-zinc-900 dark:text-white">
-                        ${order.total.toFixed(2)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => setViewOrder(order)}
-                          className="p-1.5 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
-                          title="View details"
-                        >
-                          <Eye className="h-4 w-4 text-zinc-600 dark:text-zinc-400" />
-                        </button>
-                        <button
-                          className="p-1.5 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
-                          title="Print invoice"
-                        >
-                          <Printer className="h-4 w-4 text-zinc-600 dark:text-zinc-400" />
-                        </button>
-                        <button
-                          className="p-1.5 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
-                          title="More options"
-                        >
-                          <MoreHorizontal className="h-4 w-4 text-zinc-600 dark:text-zinc-400" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Empty State */}
-          {paginatedOrders.length === 0 && (
-            <div className="text-center py-12">
-              <Package className="h-12 w-12 mx-auto text-zinc-400 mb-4" />
-              <h3 className="text-lg font-medium text-zinc-900 dark:text-white mb-2">
-                No orders found
-              </h3>
-              <p className="text-zinc-600 dark:text-zinc-400 mb-6">
-                Try adjusting your filters or search query
-              </p>
-              <button
-                onClick={() => {
-                  setSearchQuery('');
-                  setSelectedStatus('all');
-                  setSelectedPaymentStatus('all');
-                }}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
-              >
-                <Filter className="h-4 w-4" />
-                Clear Filters
-              </button>
-            </div>
-          )}
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="px-6 py-4 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-              <div className="text-sm text-zinc-600 dark:text-zinc-400">
-                Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, sortedOrders.length)} of {sortedOrders.length} orders
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                  disabled={currentPage === 1}
-                  className="p-2 rounded-lg border border-zinc-200 dark:border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-                {[...Array(totalPages)].map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setCurrentPage(i + 1)}
-                    className={`
-                      w-8 h-8 rounded-lg text-sm font-medium transition-colors
-                      ${currentPage === i + 1
-                        ? 'bg-blue-600 text-white'
-                        : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                      }
-                    `}
-                  >
-                    {i + 1}
-                  </button>
-                ))}
-                <button
-                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                  disabled={currentPage === totalPages}
-                  className="p-2 rounded-lg border border-zinc-200 dark:border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          )}
+        <div className="sm:w-48">
+          <select
+            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <option value="all">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="processing">Processing</option>
+            <option value="shipped">Shipped</option>
+            <option value="delivered">Delivered</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
         </div>
       </div>
 
-      {/* Order Details Modal */}
-      {viewOrder && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-            <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={() => setViewOrder(null)} />
-            
-            <div className="inline-block align-bottom bg-white dark:bg-zinc-900 rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
-              <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-zinc-900 dark:text-white">
-                  Order Details - {viewOrder.orderNumber}
-                </h3>
-                <button
-                  onClick={() => setViewOrder(null)}
-                  className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                >
-                  ✕
-                </button>
-              </div>
-              
-              <div className="px-6 py-4">
-                <div className="space-y-6">
-                  {/* Customer Info */}
-                  <div>
-                    <h4 className="text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-2">Customer Information</h4>
-                    <div className="bg-zinc-50 dark:bg-zinc-800/50 rounded-lg p-4">
-                      <p className="font-medium text-zinc-900 dark:text-white">{viewOrder.customer.name}</p>
-                      <p className="text-sm text-zinc-600 dark:text-zinc-400">{viewOrder.customer.email}</p>
-                      <div className="flex items-start gap-2 mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-                        <MapPin className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                        <span>{viewOrder.shippingAddress}</span>
-                      </div>
-                    </div>
-                  </div>
+      {/* Results count */}
+      <div className="text-sm text-gray-500 dark:text-gray-400">
+        Showing {filteredOrders.length} of {totalOrders} orders
+      </div>
 
-                  {/* Order Summary */}
-                  <div>
-                    <h4 className="text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-2">Order Summary</h4>
-                    <div className="bg-zinc-50 dark:bg-zinc-800/50 rounded-lg p-4 space-y-3">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-zinc-600 dark:text-zinc-400">Order Date</span>
-                        <span className="font-medium text-zinc-900 dark:text-white">{formatDate(viewOrder.date)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-zinc-600 dark:text-zinc-400">Status</span>
-                        <StatusBadge status={viewOrder.status} />
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-zinc-600 dark:text-zinc-400">Payment Status</span>
-                        <PaymentStatusBadge status={viewOrder.paymentStatus} />
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-zinc-600 dark:text-zinc-400">Payment Method</span>
-                        <span className="font-medium text-zinc-900 dark:text-white">{viewOrder.paymentMethod}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-zinc-600 dark:text-zinc-400">Total Items</span>
-                        <span className="font-medium text-zinc-900 dark:text-white">{viewOrder.items}</span>
-                      </div>
-                      <div className="pt-3 border-t border-zinc-200 dark:border-zinc-700 flex justify-between">
-                        <span className="font-medium text-zinc-900 dark:text-white">Total Amount</span>
-                        <span className="text-xl font-bold text-blue-600 dark:text-blue-400">
-                          ${viewOrder.total.toFixed(2)}
+      {/* Orders Table */}
+      <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-lg shadow">
+        <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
+          <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-300">
+            <tr>
+              <th className="px-6 py-3">Order ID</th>
+              <th className="px-6 py-3">User</th>
+              <th className="px-6 py-3">Created At</th>
+              <th className="px-6 py-3">Status</th>
+              <th className="px-6 py-3">Products</th>
+              <th className="px-6 py-3">Total Price</th>
+              <th className="px-6 py-3">Last Updated</th>
+              <th className="px-6 py-3">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredOrders.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">
+                  No orders found
+                </td>
+              </tr>
+            ) : (
+              filteredOrders.map((order) => (
+                <tr key={order.id} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
+                  <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white">
+                    #{order.id}
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-gray-200 dark:bg-gray-600 rounded-full flex items-center justify-center">
+                        <span className="text-xs text-gray-500 dark:text-gray-300">
+                          {order.user.charAt(0).toUpperCase()}
                         </span>
                       </div>
+                      <div className="font-medium text-gray-900 dark:text-white">{order.user}</div>
                     </div>
-                  </div>
+                  </td>
+                  <td className="px-6 py-4 dark:text-gray-300">
+                    {formatDate(order.created_at)}
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(order.status)}`}>
+                      {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 dark:text-gray-300">
+                    {order.products}
+                  </td>
+                  <td className="px-6 py-4 font-medium dark:text-gray-300">
+                    {formatCurrency(order.total_price)}
+                  </td>
+                  <td className="px-6 py-4 dark:text-gray-300">
+                    {formatDate(order.updated_at)}
+                  </td>
+                  <td className="px-6 py-4">
+                    <button className="font-medium text-blue-600 hover:underline dark:text-blue-400 mr-3">
+                      View
+                    </button>
+                    <button className="font-medium text-gray-600 hover:underline dark:text-gray-300">
+                      Edit
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
 
-                  {/* Actions */}
-                  <div className="flex items-center justify-end gap-3">
-                    <button
-                      onClick={() => setViewOrder(null)}
-                      className="px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                    >
-                      Close
-                    </button>
-                    <button className="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 text-sm font-medium text-white hover:opacity-90 transition-opacity">
-                      <FileText className="h-4 w-4 inline mr-2" />
-                      Download Invoice
-                    </button>
-                  </div>
-                </div>
-              </div>
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3 sm:px-6 rounded-lg shadow">
+          <div className="flex flex-1 justify-between sm:hidden">
+            <button
+              onClick={handlePrevPage}
+              disabled={!prevPageUrl}
+              className={`relative inline-flex items-center rounded-md border px-4 py-2 text-sm font-medium ${prevPageUrl
+                  ? 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-300 dark:text-gray-600 cursor-not-allowed'
+                }`}
+            >
+              Previous
+            </button>
+            <button
+              onClick={handleNextPage}
+              disabled={!nextPageUrl}
+              className={`relative ml-3 inline-flex items-center rounded-md border px-4 py-2 text-sm font-medium ${nextPageUrl
+                  ? 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-300 dark:text-gray-600 cursor-not-allowed'
+                }`}
+            >
+              Next
+            </button>
+          </div>
+          <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                Page <span className="font-medium">{currentPage}</span> of{' '}
+                <span className="font-medium">{totalPages}</span>
+              </p>
+            </div>
+            <div>
+              <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
+                {/* Previous Button */}
+                <button
+                  onClick={handlePrevPage}
+                  disabled={!prevPageUrl}
+                  className={`relative inline-flex items-center rounded-l-md px-3 py-2 text-sm font-semibold ${prevPageUrl
+                      ? 'text-gray-900 dark:text-gray-200 ring-1 ring-inset ring-gray-300 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 focus:z-20 focus:outline-offset-0'
+                      : 'text-gray-300 dark:text-gray-600 cursor-not-allowed ring-1 ring-inset ring-gray-200 dark:ring-gray-700'
+                    }`}
+                >
+                  <svg className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path fillRule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clipRule="evenodd" />
+                  </svg>
+                  Previous
+                </button>
+
+                {/* Current Page Display */}
+                <span className="relative inline-flex items-center bg-blue-50 dark:bg-blue-900/30 px-4 py-2 text-sm font-semibold text-blue-600 dark:text-blue-400 ring-1 ring-inset ring-gray-300 dark:ring-gray-600">
+                  Page {currentPage}
+                </span>
+
+                {/* Next Button */}
+                <button
+                  onClick={handleNextPage}
+                  disabled={!nextPageUrl}
+                  className={`relative inline-flex items-center rounded-r-md px-3 py-2 text-sm font-semibold ${nextPageUrl
+                      ? 'text-gray-900 dark:text-gray-200 ring-1 ring-inset ring-gray-300 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 focus:z-20 focus:outline-offset-0'
+                      : 'text-gray-300 dark:text-gray-600 cursor-not-allowed ring-1 ring-inset ring-gray-200 dark:ring-gray-700'
+                    }`}
+                >
+                  Next
+                  <svg className="h-4 w-4 ml-1" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </nav>
             </div>
           </div>
         </div>

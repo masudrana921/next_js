@@ -11,8 +11,8 @@ const AuthChecker = ({ children }: { children: React.ReactNode }) => {
     const router = useRouter();
 
     useEffect(() => {
-        const accessToken = Cookies.get('access');
-        const refreshToken = Cookies.get('refresh');
+        const accessToken = localStorage.getItem('access');
+        const refreshToken = localStorage.getItem('refresh');
 
         // যদি টোকেন না থাকে, সরাসরি লগইন পেজে পাঠানো
         if (!accessToken) {
