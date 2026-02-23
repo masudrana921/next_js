@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { 
@@ -20,7 +20,6 @@ import { toast } from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import Cookies from "js-cookie";
 import { logout } from "@/services/api/auth";
-import { useEffect } from "react";
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -31,11 +30,15 @@ export default function Header({ onMenuClick }: HeaderProps) {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  
+  // Refs for outside click detection
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const userButtonRef = useRef<HTMLButtonElement>(null);
 
   const router = useRouter();
 
-  const [username, setUsername] = useState(null);
-  const [profileImage, setProfileImage] = useState(null);
+  const [username, setUsername] = useState<string | null>(null);
+  const [profileImage, setProfileImage] = useState<string | null>(null);
 
   useEffect(() => {
     const userData = localStorage.getItem("user");
@@ -46,6 +49,48 @@ export default function Header({ onMenuClick }: HeaderProps) {
     }
   }, []);
 
+  // Outside click handler
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      // Check if click is outside both the dropdown and the button
+      if (
+        userMenuRef.current && 
+        !userMenuRef.current.contains(event.target as Node) &&
+        userButtonRef.current && 
+        !userButtonRef.current.contains(event.target as Node)
+      ) {
+        setIsUserMenuOpen(false);
+      }
+    }
+
+    // Add event listener when dropdown is open
+    if (isUserMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    // Cleanup
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isUserMenuOpen]);
+
+  // Optional: Close on escape key
+  useEffect(() => {
+    function handleEscapeKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setIsUserMenuOpen(false);
+      }
+    }
+
+    if (isUserMenuOpen) {
+      document.addEventListener('keydown', handleEscapeKey);
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscapeKey);
+    };
+  }, [isUserMenuOpen]);
+
   const toggleDarkMode = () => {
     setIsDarkMode(!isDarkMode);
     document.documentElement.classList.toggle('dark');
@@ -55,11 +100,12 @@ export default function Header({ onMenuClick }: HeaderProps) {
     // Remove tokens from localStorage
     localStorage.removeItem("user");
     localStorage.removeItem("access_token");
-
-    // Remove tokens from cookies (if your app uses cookies)
     localStorage.removeItem("access");
     localStorage.removeItem("refresh");
 
+    // Close dropdown
+    setIsUserMenuOpen(false);
+    
     // Show success message
     toast.success("Logged out successfully");
 
@@ -67,10 +113,19 @@ export default function Header({ onMenuClick }: HeaderProps) {
     router.push("/login");
   };
 
+  // Optional: Hover functionality (uncomment if you want hover instead of click)
+  /*
+  const handleMouseEnter = () => {
+    setIsUserMenuOpen(true);
+  };
+
+  const handleMouseLeave = () => {
+    setIsUserMenuOpen(false);
+  };
+  */
+
   return (
     <header className="sticky top-0 z-50 w-full border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-black/80 backdrop-blur-xl">
-  
-
       <div className="mx-auto max-w-10xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 lg:h-20 items-center justify-between gap-4">
           
@@ -189,12 +244,20 @@ export default function Header({ onMenuClick }: HeaderProps) {
               </span>
             </button>
 
-            {/* User Menu */}
-            <div className="relative">
+            {/* User Menu - Updated with refs and outside click detection */}
+            <div 
+              className="relative"
+              // Uncomment for hover functionality
+              // onMouseEnter={handleMouseEnter}
+              // onMouseLeave={handleMouseLeave}
+            >
               <button
+                ref={userButtonRef}
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
                 className="flex items-center gap-2 p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                 aria-label="User menu"
+                aria-expanded={isUserMenuOpen}
+                aria-haspopup="true"
               >
                 <div className="h-8 w-8 rounded-full flex items-center justify-center overflow-hidden">
                   {profileImage ? (
@@ -212,12 +275,22 @@ export default function Header({ onMenuClick }: HeaderProps) {
                 <span className="hidden lg:block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                   {username || "Guest"}
                 </span>
-                <ChevronDown className="hidden lg:block h-4 w-4 text-zinc-400" />
+                <ChevronDown 
+                  className={`hidden lg:block h-4 w-4 text-zinc-400 transition-transform duration-200 ${
+                    isUserMenuOpen ? 'rotate-180' : ''
+                  }`} 
+                />
               </button>
 
-              {/* User Dropdown */}
+              {/* User Dropdown with ref */}
               {isUserMenuOpen && (
-                <div className="absolute right-0 mt-2 w-48 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-lg py-1">
+                <div
+                  ref={userMenuRef}
+                  className="absolute right-0 mt-2 w-48 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-lg py-1 z-50 animate-in fade-in slide-in-from-top-2 duration-200"
+                  role="menu"
+                  aria-orientation="vertical"
+                  aria-labelledby="user-menu-button"
+                >
                   {[
                     { icon: User, label: "Profile", href: "/management/profile" },
                     { icon: Package, label: "Orders", href: "/management/orders" },
@@ -230,6 +303,8 @@ export default function Header({ onMenuClick }: HeaderProps) {
                         key={item.label}
                         href={item.href}
                         className="flex items-center gap-3 px-4 py-2 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                        role="menuitem"
+                        onClick={() => setIsUserMenuOpen(false)}
                       >
                         <item.icon className="h-4 w-4" />
                         {item.label}
@@ -237,8 +312,12 @@ export default function Header({ onMenuClick }: HeaderProps) {
                     ) : (
                       <button
                         key={item.label}
-                        onClick={item.onClick}
+                        onClick={() => {
+                          item.onClick?.();
+                          setIsUserMenuOpen(false);
+                        }}
                         className="flex items-center gap-3 px-4 py-2 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors w-full text-left"
+                        role="menuitem"
                       >
                         <item.icon className="h-4 w-4" />
                         {item.label}
@@ -266,7 +345,6 @@ export default function Header({ onMenuClick }: HeaderProps) {
           </div>
         )}
       </div>
-
     </header>
   );
 }

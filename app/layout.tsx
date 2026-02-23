@@ -1,5 +1,6 @@
 import "./globals.css";
 import UserHeader from "@/components/UserHeader";
+import { Toaster } from "react-hot-toast";
 
 export const metadata = {
   title: "ShopHub",
@@ -18,6 +19,23 @@ export default function RootLayout({
 
         {/* Page Content */}
         {children}
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            success: {
+              style: {
+                background: '#22c55e',
+                color: '#fff',
+              },
+            },
+            error: {
+              style: {
+                background: '#ef4444',
+                color: '#fff',
+              },
+            },
+          }}
+        />
       </body>
     </html>
   );

@@ -11,7 +11,7 @@ const api = axios.create({
 
 // 1. Request Interceptor: প্রতিটি রিকোয়েস্টে Access Token যুক্ত করা
 api.interceptors.request.use((config) => {
-    const token = Cookies.get("access");
+    const token = localStorage.getItem("access");
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
@@ -29,7 +29,7 @@ api.interceptors.response.use(
       originalRequest._retry = true; // Retry ফ্ল্যাগ সেট করা
 
       try {
-        const refreshToken = Cookies.get("refresh");
+        const refreshToken = localStorage.getItem("refresh");
         
         if (refreshToken) {
             // রিফ্রেশ টোকেন ব্যবহার করে নতুন Access Token এর জন্য রিকোয়েস্ট
@@ -41,7 +41,7 @@ api.interceptors.response.use(
             const newAccessToken = response.data.access;
             
             // নতুন টোকেন সেভ, হেডার আপডেট এবং অরিজিনাল রিকোয়েস্টটি আবার পাঠানো
-            Cookies.set("access_token", newAccessToken);
+            localStorage.setItem("access_token", newAccessToken);
             originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
             return api(originalRequest);
         }
